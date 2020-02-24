@@ -1,5 +1,33 @@
 #!/usr/bin/env bash
 
+# Run ./remote_to_local_pcap hostname1 hostname2 hostname3
+# then run wireshark from command line
+#
+# wireshark -kni /path/script/outputs/hostname1.pcap -kni /path/script/outputs/hostname2.pcap"
+#
+#
+#
+#* using tmp /var/tmp/tmp.X8KAzeSbMq. Will purge if exists
+# mkdir: created directory '/var/tmp/tmp.X8KAzeSbMq'
+#* Running test tcpdump on host hostname1 to see if we can run
+# -> OK: hostname1
+#* mkfifo for hostname1 in /var/tmp/tmp.X8KAzeSbMq
+#* Running and backgrounding packet capture to local machine
+# ---> ssh+tcpdump will block until 'wireshark -kni /var/tmp/tmp.X8KAzeSbMq/hostname1.pcap' is ran <---
+#-> Will wait for PID 32672
+#* Running test tcpdump on host hostname2 to see if we can run
+# -> OK: hostname2
+#* mkfifo for hostname2 in /var/tmp/tmp.X8KAzeSbMq
+#* Running and backgrounding packet capture to local machine
+# ---> ssh+tcpdump will block until 'wireshark -kni /var/tmp/tmp.X8KAzeSbMq/hostname2.pcap' is ran <---
+#-> Will wait for PID 32683
+#* itearating known PID's for children for cleanup
+#* pids: 18800 32653 32672 32674 32683 32685 32686 32687 32688 32689 32691 32694 32695 32696 32697 32698
+# - Sleeping to let settle -
+#1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 
+# - Starting wait: 18800 32653 32672 32674 32683 32685 32686 32687 32688 32689 32691 32694 32695 32696 32697 32698 -
+
+
 #set -x
 
 trap ctrl_c INT
