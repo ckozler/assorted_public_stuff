@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+
+#set -x
+
+trap ctrl_c INT
+trap ctrl_c EXIT
+
+declare -a pids=()
+
+tmpdir=$(mktemp -u -d -p /var/tmp/)
+echo "* using tmp ${tmpdir}. Will purge if exists"
+if [ -d ${tmpdir} ]; then rm -rfv ${tmpdir}; fi
+mkdir -pv ${tmpdir}
+
+# Clean up 
+function ctrl_c() {
+        set +x
+        echo "* * * ctrl+c caught. Killing pids * * * "
+        for i in $(echo ${pids[@]}); do
+                echo "-> Cleaning up pid $i"
+                kill $i &> /dev/null
+        done
+
+        echo "* * * ctrl+c caught. Cleaning temp directory * * *"
+        rm -rfv ${tmpdir} &> /dev/null
+}
+
+
+list="$*"
+cmdtest="timeout 5 ssh sysadmin@THE_HOST \"sudo /sbin/tcpdump -i any -w /dev/null -c 5\" &> /dev/null"
+cmdbase="ssh sysadmin@THE_HOST \"sudo /sbin/tcpdump -lnn -vvv -X -s 0 -w - -U -i any not port 22\" > ${tmpdir}/THE_HOST.pcap"
+for i in $(echo "${list}"); do
+        cmdtest=$(echo "${cmdtest}" | sed "s,THE_HOST,$i,g")
+        cmd=$(echo "${cmdbase}" | sed "s,THE_HOST,$i,g")
+        echo "* Running test tcpdump on host $i to see if we can run"
+        eval ${cmdtest}
+        if [ ${?} -ne 0 ]; then echo "! ERROR: Failed to run test against $i. Will not run for this host" && continue; fi
+        echo " -> OK: $i"
+        echo "* mkfifo for $i in ${tmpdir}"
+        mkfifo ${tmpdir}/$i.pcap
+        if [ $? -ne 0 ]; then echo "! ERROR: mkfifo for $i failed. Skipping" && continue; fi
+        echo "* Running and backgrounding packet capture to local machine"
+        echo " ---> ssh+tcpdump will block until 'wireshark -kni ${tmpdir}/$i.pcap' is ran <---"
+        eval ${cmd} &
+        pid=$!
+        pids+=( "$pid" )
+        echo "-> Will wait for PID $pid"
+done
+
+echo "* itearating known PID's for children for cleanup"
+declare -a tmppids=${pids[@]}
+for i in $(echo "${tmppids[@]}"); do
+        curpids=$(ps --forest -o pid,tty,stat,time,cmd -g $(ps -o sid= -p $i) | awk '{ print $1 }' | grep '^[0-9]' | xargs)
+        for j in $(echo "${curpids}"); do
+                pids+=( "$j" )
+        done
+done
+
+uniq_pids=($(printf "%s\n" "${pids[@]}" | sort -u))
+echo "* pids: ${uniq_pids[@]}"
+echo " - Sleeping to let settle -"
+for i in $(seq 1 15); do echo -n "$i "; sleep 1; done
+unset pids
+declare -a pids=(${uniq_pids[@]})
+echo "- Starting wait: ${pids[@]} -"
+wait ${pids[@]} &> /dev/null
